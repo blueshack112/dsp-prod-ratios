@@ -3,6 +3,7 @@ import { signal, computed } from '@preact/signals';
 import classNames from 'classnames';
 import { Recipes, Techs, TechsByID, EpochsByTech } from '../lib/data.js';
 import state from '../state.js';
+import { readTechStates, canPickFolder, getSaveFolder, forgetSaveFolder, pickSaveFolder, latestAutosave } from '../lib/save-sync.js';
 import CSSVariables from '../css/variables.js';
 import ScrollableGrid from '../components/scrollable-grid.jsx';
 import PannableGrid from '../components/pannable-grid.jsx';
@@ -69,6 +70,73 @@ function onResearch(tech) {
 
 function resetResearch() {
 	state.research.value = [];
+}
+
+
+
+// Sync research from the game's latest autosave
+const saveFolder = signal(null);
+const syncStatus = signal(null);
+getSaveFolder().then(folder => saveFolder.value = folder);
+
+async function syncFromFile(file) {
+	const states = await readTechStates(file);
+	const unlocked = states.filter(tech => tech.unlocked && tech.id < 2000);
+	const known = unlocked.map(tech => TechsByID.get(tech.id)).filter(Boolean);
+	state.research.value = known;
+
+	const saved = new Date(file.lastModified).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+	const unknown = unlocked.length - known.length;
+	syncStatus.value = {
+		type: 'done',
+		text: `Synced ${known.length} technologies from ${file.name} (saved ${saved})`
+			+ (unknown? `, skipped ${unknown} this tool does not know about yet` : ''),
+	};
+}
+
+async function runSync(getFile) {
+	syncStatus.value = { type: 'busy', text: 'Reading save…' };
+	try {
+		await syncFromFile(await getFile());
+	} catch(error) {
+		// Dismissing the picker is not an error
+		if(error.name === 'AbortError') syncStatus.value = null;
+		else syncStatus.value = { type: 'error', text: error.message };
+	}
+}
+
+function syncResearch(event) {
+	// Without folder access (Firefox, Safari) fall back to picking the save file each time
+	if(!canPickFolder) return event.currentTarget.parentNode.querySelector('input[type="file"]').click();
+
+	runSync(async () => {
+		if(!saveFolder.value) saveFolder.value = await pickSaveFolder();
+		try {
+			return await latestAutosave(saveFolder.value);
+		} catch(error) {
+			// The folder was moved or deleted since it was picked
+			if(error.name === 'NotFoundError')
+			{
+				saveFolder.value = null;
+				forgetSaveFolder();
+				throw new Error('The save folder could not be found any more, sync again to pick it');
+			}
+			throw error;
+		}
+	});
+}
+
+function syncResearchFromInput(event) {
+	const file = event.currentTarget.files[0];
+	event.currentTarget.value = '';
+	if(file) runSync(async () => file);
+}
+
+function changeSaveFolder() {
+	runSync(async () => {
+		saveFolder.value = await pickSaveFolder();
+		return await latestAutosave(saveFolder.value);
+	});
 }
 
 function toggleShowEpoch() {
@@ -467,7 +535,32 @@ export default function Research(props) {
 					{state.research.value.length?
 						<button class="reset" onClick={resetResearch}>Reset research</button> :
 						<><br/><br/>With nothing selected, all recipes are available.</>
-					}<br/>
+					}
+					<span class="save-sync">
+						<button
+							class="sync"
+							onClick={syncResearch}
+							disabled={syncStatus.value?.type === 'busy'}
+							title="Sets your research from the game's newest autosave"
+						>Sync from game save</button>
+						{canPickFolder && saveFolder.value &&
+							<button class="change" onClick={changeSaveFolder}>Change save folder</button>
+						}
+						{!canPickFolder &&
+							<input type="file" accept=".dsv" hidden onChange={syncResearchFromInput}/>
+						}
+						{syncStatus.value?
+							<span class={classNames('status', syncStatus.value.type)} role="status">{syncStatus.value.text}</span> :
+						!saveFolder.value?
+							<span class="status">
+								{canPickFolder?
+									'The first time, choose the game\'s Save folder: Documents › Dyson Sphere Program › Save. After that one click reads the newest autosave.' :
+									'Choose a save file from Documents › Dyson Sphere Program › Save.'
+								}
+							</span> :
+							null
+						}
+					</span>
 					<br/>
 					<label title="In case the map-like controls don't work, then you can switch to native browser scrolling">
 						Native scrolling: <input type="checkbox" checked={state.nativeScroll.value} onClick={toggleNativeScroll}/>

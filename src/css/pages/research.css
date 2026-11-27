@@ -225,6 +225,40 @@
 	}
 	
 	
+	main.research .save-sync {
+		display: block;
+		margin-top: 16px;
+	}
+
+	main.research .save-sync .sync {
+		padding: 6px 10px;
+		border: 1px solid var(--neon-cyan);
+	}
+
+	main.research .save-sync .sync:disabled {
+		opacity: 0.5;
+	}
+
+	main.research .save-sync .change {
+		display: block;
+		margin-top: 6px;
+		font-size: 0.75em;
+		text-decoration: underline;
+		opacity: 0.7;
+	}
+
+	main.research .save-sync .status {
+		display: block;
+		margin-top: 8px;
+		font-size: 0.75em;
+		line-height: 1.4;
+		opacity: 0.8;
+	}
+
+	main.research .save-sync .status.done { color: var(--neon-green); opacity: 1; }
+	main.research .save-sync .status.error { color: var(--neon-red); opacity: 1; }
+
+
 	main.research .zoom {
 		position: absolute;
 		bottom: 10px;
