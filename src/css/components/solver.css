@@ -205,6 +205,12 @@
 		color: var(--neon-blue);
 	}
 	
+	.solver .node .makes {
+		margin: 0 0.3em;
+		font-size: 0.8em;
+		color: lch(100 0 0 / 0.4);
+	}
+
 	.solver .node .process {
 		/* display: none; */
 		color: lch(100 0 0 / 0.4);

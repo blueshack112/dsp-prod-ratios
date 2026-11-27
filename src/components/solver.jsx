@@ -16,6 +16,8 @@ import state from '../state.js';
 import Item from './item.jsx';
 import Recipe from './recipe.jsx';
 import Tech from './tech.jsx';
+import FlowGraph from './flow-graph.jsx';
+import { buildingForRecipe } from '../lib/flow.js';
 
 
 
@@ -171,6 +173,7 @@ function SolveTree({ solve, depth = 0, throughput, ingredient = null, hasProlife
 		}
 		
 		let facilities = throughput / ingredientsPerMinute / modifier;
+		let building = buildingForRecipe(recipe);
 		
 		
 		return (
@@ -181,7 +184,7 @@ function SolveTree({ solve, depth = 0, throughput, ingredient = null, hasProlife
 							{/* <span class="factor">{renderNumber(facilities)}</span>&times; <span class="process">{StringFromTypes.get(recipe.type)}</span> <Recipe recipe={recipe} named/> */}
 							<span title={`${+facilities.toFixed(6)}× ${StringFromTypes.get(recipe.type)}`}>
 								<span class="factor">{renderNumber(facilities)}</span>&times;
-							</span> <Recipe recipe={recipe} proliferated={proliferated} named/>
+							</span> {building && <><Item id={building} named/> <span class="makes">making</span> </>}<Recipe recipe={recipe} proliferated={proliferated} named/>
 						</div>
 						{hasProliferators && (
 							<div class="proliferator">
@@ -432,8 +435,24 @@ export default function Solver(props) {
 		return state.proliferatorPreset.value = preset;
 	}, [state.proliferator.value]);
 	
+	const isGraph = state.calculatorView.value === 'graph';
+	const views = (
+		<div class="solver-views" role="group" aria-label="View">
+			<button type="button" aria-pressed={!isGraph} onClick={() => state.calculatorView.value = 'list'}>List</button>
+			<button type="button" aria-pressed={isGraph} onClick={() => state.calculatorView.value = 'graph'}>Graph</button>
+		</div>
+	);
+
+	if(isGraph) return (
+		<div class={classNames('solver', { 'has-proliferators': hasProliferators })}>
+			{views}
+			<FlowGraph solve={solve} throughput={state.per.value}/>
+		</div>
+	);
+
 	return (
 		<div class={classNames('solver', { 'has-proliferators': hasProliferators })}>
+			{views}
 			<div class="solver-header node-header">
 				<div>
 					Buildings &times; Recipe

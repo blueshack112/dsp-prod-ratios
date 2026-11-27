@@ -62,6 +62,7 @@ const state = {
 	showHiddenUpgrades: temporarySignal('showHiddenUpgrades', false),
 	showMatrixEpoch: temporarySignal('showMatrixEpoch', false),
 	nativeScroll: temporarySignal('nativeScroll', false),
+	calculatorView: persistentSignal('calculatorView', 'list'), // 'list' or 'graph'
 	
 	recipesUnlocked: computed(() => RecipesUnlocked(state.research.value)),
 	itemsUnlocked: computed(() => ItemsUnlocked(state.research.value)),
