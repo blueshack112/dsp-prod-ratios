@@ -42,6 +42,35 @@ export function buildingForResource(item) {
 }
 
 
+// Sorters, best first. The fastest one unlocked by the current research is the one to build with
+const SorterItems = [2014, 2013, 2012, 2011];
+
+// The sorter to use and how many items a minute one of them moves.
+// Assumes the shortest reach (one grid cell) and no sorter stacking upgrades:
+// a trip there and back takes twice the sorter's travel time, 60 ticks to the second
+export function bestSorter() {
+	const unlocked = state.itemsUnlockedSet.value;
+	const id = SorterItems.find(id => unlocked.has(id)) || SorterItems[SorterItems.length - 1];
+	const item = Items.find(item => item.id === id);
+	const { stt, stackSize } = item._InserterDesc;
+	const tripsPerMinute = 60 * 60 / (2 * stt / 10000);
+	return { item, perMinute: tripsPerMinute * (stackSize || 1) };
+}
+
+// Sorters for one production step: every building needs enough of them on each input and each output
+// to keep up with that building running flat out
+export function sortersForNode(node, sorter) {
+	if(node.kind !== 'recipe' || !(node.facilities > 0)) return 0;
+	const buildings = Math.ceil(+node.facilities.toFixed(6));
+	const perBuilding = rate => Math.max(1, Math.ceil(+(rate / node.facilities / sorter.perMinute).toFixed(6)));
+	
+	let each = node.locked.length;
+	for(const link of node.inputs) each += perBuilding(link.rate);
+	for(const output of node.outputs) each += perBuilding(output.rate);
+	return buildings * each;
+}
+
+
 // Mirrors the maths of <SolveTree> in components/solver.jsx
 export function buildFlow(root, throughput) {
 	const nodes = new Map();
@@ -140,9 +169,72 @@ export function buildFlow(root, throughput) {
 
 	walk(root, throughput, null, null, []);
 
+	addSplitters(nodes, links);
+	
 	const flow = { nodes: Array.from(nodes.values()), links: Array.from(links.values()), root: nodes.get(`recipe:${root.recipe?.id}`) };
 	for(const link of flow.links) nodes.get(link.to).inputs.push(link);
 	return flow;
+}
+
+
+
+// Wherever one output feeds several consumers, put splitters in between.
+// A splitter has four ports, so one belt in leaves three out; more consumers than that chain a second splitter
+// off the third output, and so on.
+const SplitterOutputs = 3;
+
+function addSplitters(nodes, links) {
+	const groups = new Map();
+	for(const link of links.values())
+	{
+		const key = `${link.from}>${link.item}`;
+		if(!groups.has(key)) groups.set(key, []);
+		groups.get(key).push(link);
+	}
+	
+	for(const [groupKey, group] of groups)
+	{
+		if(group.length < 2) continue;
+		
+		const item = Items.find(item => item.id === group[0].item);
+		const from = group[0].from;
+		for(const link of group) links.delete(link.key);
+		
+		// Biggest consumers first, so the chain hands on ever smaller amounts
+		let remaining = group.slice().sort((a, b) => b.rate - a.rate);
+		let source = from;
+		for(let index = 1; remaining.length; ++index)
+		{
+			const key = `splitter:${groupKey}:${index}`;
+			const rate = remaining.reduce((sum, link) => sum + link.rate, 0);
+			const direct = remaining.length > SplitterOutputs? remaining.slice(0, SplitterOutputs - 1) : remaining;
+			remaining = remaining.slice(direct.length);
+			
+			const outputs = direct.map(link => ({ item: item.id, rate: link.rate, to: link.to }));
+			if(remaining.length) outputs.push({ item: item.id, rate: remaining.reduce((sum, link) => sum + link.rate, 0), to: `splitter:${groupKey}:${index + 1}` });
+			
+			nodes.set(key, { key, kind: 'splitter', item, rate, outputs, inputs: [], locked: [] });
+			links.set(`${source}>${key}`, { key: `${source}>${key}`, from: source, to: key, item: item.id, rate });
+			for(const link of direct)
+			{
+				const out = `${key}>${link.to}`;
+				links.set(out, { key: out, from: key, to: link.to, item: item.id, rate: link.rate });
+			}
+			source = key;
+		}
+	}
+}
+
+// The smallest whole-number ratio between amounts, such as [2, 1], or null when there is no tidy one
+export function splitRatio(rates) {
+	const smallest = Math.min(...rates);
+	if(!(smallest > 0)) return null;
+	for(let multiplier = 1; multiplier <= 12; ++multiplier)
+	{
+		const parts = rates.map(rate => rate / smallest * multiplier);
+		if(parts.every(part => Math.abs(part - Math.round(part)) < 0.01)) return parts.map(Math.round);
+	}
+	return null;
 }
 
 
@@ -186,6 +278,8 @@ export function layoutFlow(flow, offsets) {
 	const columns = Array.from({ length: layers }, () => []);
 	for(const node of nodes)
 	{
+		// Everything that is gathered lines up in the first column, however short its chain is
+		if(node.kind === 'source') node.layer = layers - 1;
 		node.column = layers - 1 - node.layer;
 		node.height = nodeHeight(node);
 		columns[node.column].push(node);
@@ -236,6 +330,10 @@ export function layoutFlow(flow, offsets) {
 		if(offset) { node.x += offset.x; node.y += offset.y; }
 	}
 
+	// A splitter's outputs are listed in the order of where they lead, top to bottom
+	for(const node of nodes)
+		if(node.kind === 'splitter') node.outputs.sort((a, b) => centre(byKey.get(a.to)) - centre(byKey.get(b.to)));
+	
 	// Ports: inputs down the left of a node (ordered by where they come from), outputs down the right
 	for(const node of nodes)
 	{
@@ -248,7 +346,7 @@ export function layoutFlow(flow, offsets) {
 	for(const link of links)
 	{
 		const from = byKey.get(link.from);
-		const index = from.kind === 'source'? 0 : Math.max(0, from.outputs.findIndex(output => output.item === link.item));
+		const index = from.kind === 'source'? 0 : Math.max(0, from.outputs.findIndex(output => output.item === link.item && (!output.to || output.to === link.to)));
 		link.x1 = from.x + Metrics.width;
 		link.y1 = from.y + Metrics.header + index * Metrics.row + Metrics.row / 2;
 		const bend = Math.max(50, (link.x2 - link.x1) / 2);

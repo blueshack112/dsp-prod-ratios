@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import classNames from 'classnames';
 import { Items } from '../lib/data.js';
-import { buildFlow, layoutFlow, buildingForResource, Metrics } from '../lib/flow.js';
+import { buildFlow, layoutFlow, buildingForResource, splitRatio, Metrics } from '../lib/flow.js';
 import state from '../state.js';
 import Item from './item.jsx';
 
@@ -45,8 +45,9 @@ function nodeAmount(node) {
 		return { value: node.facilities, icon: building, label: `${building?.name || 'buildings'} making ${recipeName(node.recipe)}` };
 	}
 	
-	const gatherer = buildingForResource(node.item);
+	const gatherer = node.kind === 'source'? buildingForResource(node.item) : null;
 	const building = gatherer && Items.find(item => item.id === gatherer.building);
+	if(node.kind === 'splitter') return { value: node.rate, icon: node.item, label: `${node.item.name} per minute through this splitter` };
 	if(gatherer?.perVein) return { value: node.rate / gatherer.perVein, icon: building, label: `veins of ${node.item.name} under ${building.name}s` };
 	if(gatherer?.perBuilding) return { value: node.rate / gatherer.perBuilding, icon: building, label: `${building.name} collecting ${node.item.name}` };
 	return { value: node.rate, icon: node.item, label: `${node.item.name} per minute` };
@@ -89,6 +90,38 @@ function FlowNode({ node, isFinal }) {
 	const style = { left: node.x, top: node.y, width: Metrics.width, height: node.height };
 	const isSelected = selectedKey.value === node.key;
 
+	if(node.kind === 'splitter')
+	{
+		const rates = node.outputs.map(output => output.rate);
+		const ratio = splitRatio(rates);
+		const isEven = rates.every(rate => Math.abs(rate - rates[0]) < rates[0] * 0.001);
+		const hint = isEven?
+			'Even split: leave the splitter on its default setting.' :
+			'Uneven split: a splitter shares evenly, but once a belt that needs less backs up, the rest flows on to the other outputs. No filter or priority setting is needed.';
+		
+		return (
+			<div class={classNames('flow-node is-splitter', { 'is-selected': isSelected })} data-key={node.key} style={style}>
+				<div class="flow-head" title={hint}>
+					<Item id={2020 /* Splitter */}/>
+					<div class="flow-title">
+						<span class="name">Splitter</span>
+						<span class="making">
+							{node.item.name} {isEven? 'split evenly' : 'split'} {ratio? ratio.join(' : ') : rates.map(rate => `${Math.round(rate / node.rate * 100)}%`).join(' : ')}
+						</span>
+					</div>
+				</div>
+				<ul class="flow-inputs">
+					<li><Item item={node.item}/><Rate rate={node.rate}/></li>
+				</ul>
+				<ul class="flow-outputs">
+					{node.outputs.map(output =>
+						<li key={output.to}><Rate rate={output.rate}/><Item item={node.item}/></li>
+					)}
+				</ul>
+			</div>
+		);
+	}
+	
 	if(node.kind === 'source')
 	{
 		const gatherer = buildingForResource(node.item);

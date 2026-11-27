@@ -79,6 +79,11 @@
 		background-color: lch(22 18 240);
 	}
 
+	.flow-node.is-splitter {
+		background-color: lch(24 22 70);
+		border-style: dashed;
+	}
+	
 	.flow-node.is-final {
 		border-color: var(--neon-yellow);
 		box-shadow: 0 0 18px lch(97 79.89 103.3 / 0.25);
@@ -246,5 +251,79 @@
 	
 	.flow-controls output ~ button + button {
 		border-left: 1px solid lch(100 0 0 / 0.25);
+	}
+}
+
+@layer components {
+	.flow-totals {
+		padding: 12px 20px 40px;
+		color: lch(100 0 0 / 0.85);
+		font-size: 16px;
+	}
+	
+	.flow-totals table {
+		width: 100%;
+		max-width: 1100px;
+		margin-top: 16px;
+		border-collapse: collapse;
+	}
+	
+	.flow-totals caption {
+		padding: 8px 0;
+		text-align: left;
+		font-size: 18px;
+	}
+	
+	.flow-totals th {
+		padding: 6px 12px;
+		border-bottom: 4px solid lch(100 0 0 / 0.05);
+		text-align: left;
+		font-size: 14px;
+		font-weight: normal;
+		color: lch(100 0 0 / 0.6);
+	}
+	
+	.flow-totals td {
+		padding: 6px 12px;
+		vertical-align: middle;
+	}
+	
+	.flow-totals tbody tr:nth-child(even) {
+		background-color: lch(0 0 0 / 0.1);
+	}
+	
+	.flow-totals .build {
+		width: 6em;
+		text-align: right;
+		white-space: nowrap;
+		font-size: 20px;
+		color: var(--neon-blue);
+		font-variant-numeric: tabular-nums;
+	}
+	
+	.flow-totals .building {
+		white-space: nowrap;
+	}
+	
+	.flow-totals .exact {
+		color: var(--neon-green);
+		font-variant-numeric: tabular-nums;
+	}
+	
+	.flow-totals .uses {
+		font-size: 14px;
+		color: lch(100 0 0 / 0.6);
+	}
+	
+	.flow-totals tfoot td {
+		border-top: 4px solid lch(100 0 0 / 0.05);
+	}
+	
+	.flow-totals .note {
+		max-width: 1100px;
+		margin-top: 20px;
+		font-size: 13px;
+		line-height: 1.5;
+		color: lch(100 0 0 / 0.5);
 	}
 }

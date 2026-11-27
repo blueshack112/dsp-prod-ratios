@@ -17,6 +17,7 @@ import Item from './item.jsx';
 import Recipe from './recipe.jsx';
 import Tech from './tech.jsx';
 import FlowGraph from './flow-graph.jsx';
+import FlowTotals from './flow-totals.jsx';
 import { buildingForRecipe } from '../lib/flow.js';
 
 
@@ -435,11 +436,20 @@ export default function Solver(props) {
 		return state.proliferatorPreset.value = preset;
 	}, [state.proliferator.value]);
 	
-	const isGraph = state.calculatorView.value === 'graph';
+	const view = ['graph', 'totals'].includes(state.calculatorView.value)? state.calculatorView.value : 'list';
+	const isGraph = view === 'graph';
 	const views = (
 		<div class="solver-views" role="group" aria-label="View">
-			<button type="button" aria-pressed={!isGraph} onClick={() => state.calculatorView.value = 'list'}>List</button>
-			<button type="button" aria-pressed={isGraph} onClick={() => state.calculatorView.value = 'graph'}>Graph</button>
+			{[['list', 'List'], ['graph', 'Graph'], ['totals', 'Totals']].map(([name, label]) =>
+				<button type="button" aria-pressed={view === name} onClick={() => state.calculatorView.value = name}>{label}</button>
+			)}
+		</div>
+	);
+	
+	if(view === 'totals') return (
+		<div class={classNames('solver', { 'has-proliferators': hasProliferators })}>
+			{views}
+			<FlowTotals solve={solve} throughput={state.per.value}/>
 		</div>
 	);
 
