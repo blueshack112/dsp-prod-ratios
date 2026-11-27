@@ -90,19 +90,42 @@ export default function PannableGrid(props) {
 			root.classList.add('has-wheel');
 			
 			
-			// Trackpad pinch-zoom
-			if (event.ctrlKey)
+			// A mouse wheel notch reports a large, vertical-only delta that scales with the OS
+			// "lines per scroll" setting, so ignore its size and step one zoom level instead.
+			// Trackpads report small continuous deltas (two-finger scroll, or pinch with ctrlKey set)
+			const isMouseWheel = event.deltaY !== 0 && (
+				event.deltaMode !== 0
+				|| (event.deltaX === 0 && event.wheelDeltaY && event.wheelDeltaY % 120 === 0)
+				|| (event.ctrlKey? Math.abs(event.deltaY) >= 50 : event.deltaX === 0 && Math.abs(event.deltaY) >= 100)
+			);
+
+			// Mouse wheel zoom (like in game), or trackpad pinch-zoom
+			if (isMouseWheel || event.ctrlKey)
 			{
-				let s = Math.exp(-event.deltaY/100);
-				// z *= s;
-				
-				let newZoom = Math.max(ZoomLevels[ZoomLevels.length - 1], Math.min(ZoomLevels[0], z * s));
-				s = newZoom / z;
-				
-				let dx = event.pageX - root.offsetWidth/2;
-				let dy = event.pageY - root.offsetHeight/2;
-				x += dx/(newZoom*s) - dx/newZoom;
-				y += dy/(newZoom*s) - dy/newZoom;
+				let newZoom;
+
+				if(isMouseWheel)
+				{
+					if(event.deltaY < 0) newZoom = ZoomLevels.findLast(level => level > z);
+					else if(event.deltaY > 0) newZoom = ZoomLevels.find(level => level < z);
+					newZoom ??= z;
+				}
+
+				// Trackpad pinch reports small continuous deltas
+				else
+				{
+					newZoom = z * Math.exp(-event.deltaY/100);
+				}
+
+				newZoom = Math.max(ZoomLevels[ZoomLevels.length - 1], Math.min(ZoomLevels[0], newZoom));
+
+				// Keep the point under the cursor in place
+				// (the transform scales around 50vw/50vh from the root's top left corner)
+				let bounds = root.getBoundingClientRect();
+				let dx = event.clientX - (bounds.left + window.innerWidth/2);
+				let dy = event.clientY - (bounds.top + window.innerHeight/2);
+				x += dx/newZoom - dx/z;
+				y += dy/newZoom - dy/z;
 				z = newZoom;
 			}
 			
@@ -163,6 +186,10 @@ export default function PannableGrid(props) {
 		let mouse = { x: 0, y: 0, at: 0 };
 		
 		function onPointerDown(event) {
+			// Let native controls handle their own clicks; capturing the pointer
+			// below would retarget the click to the root and their handlers never fire
+			if(!pointers.length && event.target.closest?.('button, input, label, select, a[href]')) return;
+
 			event.preventDefault();
 			event.stopImmediatePropagation();
 			
